@@ -1,6 +1,8 @@
 import { ethers } from 'ethers';
 import { useEffect, useState } from 'react';
 import Escrow from './Escrow';
+import EscrowContract from './artifacts/contracts/Escrow.sol/Escrow';
+import EscrowStore from './artifacts/contracts/EscrowStore.sol/EscrowStore';
 import deploy from './deploy';
 
 const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -25,6 +27,82 @@ function App() {
 
     getAccounts();
   }, [account]);
+
+  useEffect(() => {
+    const escrowStoreAddress = process.env.REACT_APP_ESCROWSTORE;
+    const escrowStoreContract = new ethers.Contract(escrowStoreAddress, EscrowStore.abi, signer);
+  
+    async function getEscrowCount() {
+      try {
+        const escrowCount = await escrowStoreContract.escrowCount();
+        return parseInt(escrowCount, 16);
+      } catch (error) {
+        console.error('Error retrieving escrow count:', error);
+        return 0; // Return a default value or handle the error accordingly
+      }
+    }
+  
+    async function getEscrowDetails(id) {
+      try {
+        const escrowAddress = await escrowStoreContract.escrows(id);
+        const escrowContract = new ethers.Contract(escrowAddress, EscrowContract.abi, signer);
+        const [arbiter, beneficiary, balance] = await Promise.all([
+          escrowContract.arbiter(),
+          escrowContract.beneficiary(),
+          provider.getBalance(escrowAddress),
+        ]);
+        const value = balance.toString();
+        const escrowDetails = { escrowAddress, arbiter, beneficiary, value };
+        return escrowDetails;
+      } catch (error) {
+        console.error('Error retrieving escrow details:', error);
+        return null;
+      }
+    }
+  
+    async function getEscrows() {
+      const totalEscrows = await getEscrowCount();
+      console.log('Total Escrows:', totalEscrows);
+    
+      const escrowDetailsPromises = Array.from({ length: totalEscrows }, (_, i) => getEscrowDetails(i));
+    
+      const escrowDetailsArray = await Promise.all(escrowDetailsPromises);
+    
+      const uniqueEscrowAddressesSet = new Set(); // Set to track unique escrow addresses
+      const filteredEscrows = escrowDetailsArray
+        .filter(escrowDetails => escrowDetails && escrowDetails.value > 0)
+        .filter(({ escrowAddress }) => {
+          if (uniqueEscrowAddressesSet.has(escrowAddress)) {
+            return false; // Skip if the escrow address is already in the set (duplicate)
+          }
+          uniqueEscrowAddressesSet.add(escrowAddress); // Add the escrow address to the set
+          console.log(`added ${escrowAddress} to existing address set`);
+          return true; // Include in filteredEscrows array
+        })
+        .map(({ escrowAddress, arbiter, beneficiary, value }) => {
+          const currentEscrow = new ethers.Contract(escrowAddress, EscrowContract.abi, signer);
+          return {
+            address: escrowAddress,
+            arbiter,
+            beneficiary,
+            value: value.toString(),
+            handleApprove: async () => {
+             currentEscrow.on('Approved', () => {
+              document.getElementById(escrowAddress).className = 'complete';
+              document.getElementById(escrowAddress).innerText = "✓ It's been approved!";
+            });
+
+            await approve(currentEscrow, signer);
+            },
+          };
+        });
+    
+      setEscrows(prevEscrows => [...prevEscrows, ...filteredEscrows]);
+    }
+  
+    getEscrows();
+  }, [signer, setEscrows]);
+  
 
   async function newContract() {
     const beneficiary = document.getElementById('beneficiary').value;
