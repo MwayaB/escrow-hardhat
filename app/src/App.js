@@ -29,6 +29,7 @@ function App() {
   }, [account]);
 
   useEffect(() => {
+    const signer = provider.getSigner();
   const escrowStoreAddress = process.env.REACT_APP_ESCROWSTORE;
   const escrowStoreContract = new ethers.Contract(escrowStoreAddress, EscrowStore.abi, signer);
 
@@ -64,10 +65,10 @@ function App() {
     const totalEscrows = await getEscrowCount();
     console.log('Total Escrows:', totalEscrows);
 
+    if(totalEscrows > 0){
     const escrowDetailsPromises = Array.from({ length: totalEscrows }, (_, i) => getEscrowDetails(i));
 
     const escrowDetailsArray = await Promise.all(escrowDetailsPromises);
-
     const filteredEscrows = escrowDetailsArray
       .filter(escrowDetails => escrowDetails && escrowDetails.value > 0)
       .map(({ escrowAddress, arbiter, beneficiary, value }) => {
@@ -88,11 +89,13 @@ function App() {
         };
       });
 
+      console.log(filteredEscrows);
     setEscrows(prevEscrows => [...prevEscrows, ...filteredEscrows]);
   }
-
+  }
   getEscrows();
-}, [signer, setEscrows]);
+
+}, [setEscrows]);
 
 
   async function newContract() {
