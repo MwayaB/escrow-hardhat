@@ -29,7 +29,8 @@ function App() {
   }, [account]);
 
   useEffect(() => {
-    const signer = provider.getSigner();
+
+  const signer = provider.getSigner();
   const escrowStoreAddress = process.env.REACT_APP_ESCROWSTORE;
   const escrowStoreContract = new ethers.Contract(escrowStoreAddress, EscrowStore.abi, signer);
 
@@ -69,28 +70,8 @@ function App() {
     const escrowDetailsPromises = Array.from({ length: totalEscrows }, (_, i) => getEscrowDetails(i));
 
     const escrowDetailsArray = await Promise.all(escrowDetailsPromises);
-    const filteredEscrows = escrowDetailsArray
-      .filter(escrowDetails => escrowDetails && escrowDetails.value > 0)
-      .map(({ escrowAddress, arbiter, beneficiary, value }) => {
-        const currentEscrow = new ethers.Contract(escrowAddress, EscrowContract.abi, signer);
-        return {
-          address: escrowAddress,
-          arbiter,
-          beneficiary,
-          value: value.toString(),
-          handleApprove: async () => {
-            currentEscrow.on('Approved', () => {
-              document.getElementById(escrowAddress).className = 'complete';
-              document.getElementById(escrowAddress).innerText = "✓ It's been approved!";
-            });
-
-            await approve(currentEscrow, signer);
-          },
-        };
-      });
-
-      console.log(filteredEscrows);
-    setEscrows(prevEscrows => [...prevEscrows, ...filteredEscrows]);
+    const filteredEscrows = escrowDetailsArray.filter(escrowDetails => escrowDetails && escrowDetails.value > 0)
+    setEscrows(filteredEscrows);
   }
   }
   getEscrows();
@@ -110,19 +91,21 @@ function App() {
       arbiter,
       beneficiary,
       value: amount.toString(),
-      handleApprove: async () => {
-        escrowContract.on('Approved', () => {
-          document.getElementById(escrowContract.address).className =
-            'complete';
-          document.getElementById(escrowContract.address).innerText =
-            "✓ It's been approved!";
-        });
-
-        await approve(escrowContract, signer);
-      },
     };
 
     setEscrows([...escrows, escrow]);
+  }
+
+  async function handleApprove (escrowAddress, signer) {
+    const contract = new ethers.Contract(escrowAddress, EscrowContract.abi, signer);;
+    contract.on('Approved', () => {
+      document.getElementById(escrowAddress).className =
+        'complete';
+      document.getElementById(escrowAddress).innerText =
+        "✓ It's been approved!";
+    });
+
+    await approve(contract, signer);
   }
 
   return (
@@ -161,9 +144,7 @@ function App() {
         <h1> Existing Contracts </h1>
 
         <div id="container">
-          {escrows.map((escrow) => {
-            return <Escrow key={escrow.address} {...escrow} />;
-          })}
+        <Escrow escrows={escrows} handleApprove={handleApprove} />
         </div>
       </div>
     </>
